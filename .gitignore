@@ -1,7 +1,11 @@
 # Data
 Dataset/
 Processed_data/
-model/*.pth
+checkpoint/*.pth
+weights/*.pth
+weights/*.pt
+weights/*.npy
+!weights/.gitkeep
 # file
 *.jpg
 *.png

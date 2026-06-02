@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from dice_loss import DiceLoss
+from src.losses.dice_loss import DiceLoss
 
 class WeightedFocalDiceLoss(nn.Module):
     def __init__(self, class_weights=None, gamma=2.0, lam_f=0.7, lam_d=0.3):

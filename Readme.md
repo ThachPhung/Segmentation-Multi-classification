@@ -32,7 +32,7 @@ Repository này **đóng gói pipeline suy luận** để chạy ngoài Kaggle: 
 ## Cài đặt
 
 ```bash
-cd "/Users/thachphung/Documents/Graduation Project"
+cd "Thu muc"
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt

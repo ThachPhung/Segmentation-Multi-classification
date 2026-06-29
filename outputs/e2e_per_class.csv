@@ -1,0 +1,6 @@
+Lớp,GT instances,Predicted instances,Spatial matches,Precision,Recall,Dice
+Vết xước (Scratches),194,555,51,0.0919,0.2629,0.8305
+Tạp chất (Inclusions),33,0,0,0.0000,0.0000,0.0000
+Bề mặt lõm (Pitted surface),1025,3363,452,0.1344,0.4410,0.8131
+Vết bẩn (Stains),173,312,103,0.3301,0.5954,0.8176
+Tổng / Macro,1425,4230,606,0.1433,0.4253,0.8153

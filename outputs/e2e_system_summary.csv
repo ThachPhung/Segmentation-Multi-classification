@@ -1,0 +1,14 @@
+Chỉ số đánh giá hệ thống,Giá trị thực nghiệm
+Tổng số ảnh kiểm thử,1334.0
+Số ảnh dự đoán đúng ít nhất một khuyết tật,601.0
+Tỷ lệ Recall ở cấp độ ảnh (%),45.05
+Tổng số thực thể lỗi nhãn chuẩn (GT Instances),1425.0
+Tổng số vùng mô hình dự đoán (Predicted Instances),4230.0
+Số vùng trùng khớp không gian (Spatial Matches),606.0
+Số vùng phát hiện đúng hoàn toàn (End-to-end),606.0
+Độ chính xác phân loại trên vùng RoI trùng khớp (%),100.0
+Tỷ lệ bỏ sót thực thể lỗi - Miss Rate (%),57.47
+Tỷ lệ báo động giả - False Alarm Rate (%),85.67
+Instance Recall (%),42.53
+Instance Precision (%),14.33
+Dice trung bình (cặp match đúng lớp),0.8153

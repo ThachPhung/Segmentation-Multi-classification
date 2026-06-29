@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="Giới hạn số ảnh (0 = tất cả)")
     parser.add_argument("--seg-weights", type=str, default=None, help="Checkpoint segmentation")
     parser.add_argument("--cls-weights", type=str, default=None, help="Checkpoint classifier")
-    parser.add_argument("--device", type=str, default=None, choices=["cpu", "cuda"])
+    parser.add_argument("--device", type=str, default=None, choices=["cpu", "cuda", "mps"])
     parser.add_argument(
         "--output",
         type=str,

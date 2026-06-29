@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from inference_config import INFERENCE_CFG
+from src.inference.device import resolve_device
 from src.models.attention_unet_efficientnet_b3 import AttentionUNetEfficientNetB3
 from src.models.classifier import build_cls_model
 
@@ -40,7 +41,7 @@ def load_segmentation_model(
         dropout=cfg["seg_dropout"],
     )
     model.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
-    dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    dev = resolve_device(str(device) if device is not None else None)
     return model.to(dev).eval()
 
 
@@ -62,5 +63,5 @@ def load_classifier_model(
         dropout=cfg["cls_dropout"],
     )
     model.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
-    dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    dev = resolve_device(str(device) if device is not None else None)
     return model.to(dev).eval()

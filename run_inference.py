@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--output", type=str, default=None, help="JSON kết quả")
     parser.add_argument("--submission", type=str, default=None, help="CSV format Kaggle")
-    parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
+    parser.add_argument("--device", choices=["cpu", "cuda", "mps"], default=None)
     parser.add_argument(
         "--show",
         action="store_true",

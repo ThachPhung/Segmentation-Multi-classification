@@ -13,6 +13,7 @@ import numpy as np
 import torch
 
 from inference_config import DEFECT_NAMES_VI, INFERENCE_CFG
+from src.inference.device import resolve_device
 from src.inference.cls_inference import classify_crop_probs
 from src.inference.model_loaders import load_classifier_model, load_segmentation_model, load_thresholds
 from src.inference.roi import (
@@ -94,9 +95,7 @@ class DefectInferencePipeline:
         self.cfg = dict(cfg or INFERENCE_CFG)
         cls_backbone = cls_backbone or self.cfg.get("cls_backbone", "efficientnet_b3")
         self.defect_names = defect_names or DEFECT_NAMES_VI
-        self.device = torch.device(
-            device or ("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        self.device = torch.device(resolve_device(device))
 
         h, w = self.cfg["image_height"], self.cfg["image_width"]
         self.seg_transform = build_seg_transform(h, w)

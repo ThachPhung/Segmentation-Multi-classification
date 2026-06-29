@@ -4,12 +4,15 @@ Hiển thị kết quả inference: input, segmentation, output, classification.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from src.inference.roi import collect_bboxes_from_mask_chw, component_mask_in_bbox
+
 if TYPE_CHECKING:
     from src.inference.pipeline import InferenceResult
 
@@ -81,6 +84,80 @@ def overlay_final_output(image_rgb: np.ndarray, detections: list, alpha: float =
             cv2.LINE_AA,
         )
     return base_u8.astype(np.float32) / 255.0
+
+
+@dataclass
+class CropMaskItem:
+    """Mask component đã làm sạch — dùng cho RLE / crop classifier."""
+
+    seg_class_id: int
+    bbox: tuple[int, int, int, int]
+    component_mask: np.ndarray
+
+
+def collect_crop_mask_items(
+    mask_chw: np.ndarray,
+    *,
+    min_component_area: int = 20,
+    max_items: int | None = None,
+) -> list[CropMaskItem]:
+    """Thu thập mask component (giống bước chuẩn bị crop trong pipeline)."""
+    items: list[CropMaskItem] = []
+    for seg_class_idx, bbox in collect_bboxes_from_mask_chw(
+        mask_chw, min_component_area=min_component_area
+    ):
+        component = component_mask_in_bbox(mask_chw[seg_class_idx], bbox)
+        items.append(
+            CropMaskItem(
+                seg_class_id=int(seg_class_idx) + 1,
+                bbox=bbox,
+                component_mask=component,
+            )
+        )
+        if max_items is not None and len(items) >= max_items:
+            break
+    return items
+
+
+def overlay_component_masks(
+    image_rgb: np.ndarray,
+    crop_items: list[CropMaskItem],
+    *,
+    alpha: float = 0.55,
+    draw_bboxes: bool = True,
+) -> np.ndarray:
+    """Overlay mask đã chuẩn bị để cắt (component) lên ảnh."""
+    base = (_to_display_rgb(image_rgb) * 255).astype(np.uint8)
+    for item in crop_items:
+        m = item.component_mask.astype(bool)
+        if not m.any():
+            continue
+        cid = item.seg_class_id
+        bgr = CLASS_COLORS_RGB.get(cid, (255, 255, 255))[::-1]
+        color = np.array(CLASS_COLORS_NORM.get(cid, (1, 1, 1)), dtype=np.float32)
+        base_f = base.astype(np.float32) / 255.0
+        base_f[m] = (1 - alpha) * base_f[m] + alpha * color
+        base = (np.clip(base_f, 0, 1) * 255).astype(np.uint8)
+        if draw_bboxes:
+            x1, y1, x2, y2 = item.bbox
+            cv2.rectangle(base, (int(x1), int(y1)), (int(x2), int(y2)), bgr, 1)
+
+    return base.astype(np.float32) / 255.0
+
+
+def mask_for_crop_rgb(
+    crop_items: list[CropMaskItem],
+    shape_hw: tuple[int, int],
+) -> np.ndarray:
+    """Ảnh RGB chỉ gồm mask component (màu theo lớp), nền đen."""
+    h, w = shape_hw
+    out = np.zeros((h, w, 3), dtype=np.float32)
+    for item in crop_items:
+        m = item.component_mask.astype(bool)
+        if not m.any():
+            continue
+        out[m] = np.array(CLASS_COLORS_NORM.get(item.seg_class_id, (1, 1, 1)), dtype=np.float32)
+    return out
 
 
 def _classification_text(probs: dict[int, float], thresholds: list[float], defect_names: dict) -> str:
@@ -164,6 +241,167 @@ def plot_inference_result(
         path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
 
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def panels_from_result(
+    result: "InferenceResult",
+    *,
+    min_component_area: int = 20,
+) -> dict[str, np.ndarray]:
+    """Trả về các ảnh RGB float [0,1] dùng cho báo cáo."""
+    h, w = result.image_resized.shape[:2]
+    crop_items = collect_crop_mask_items(
+        result.mask_seg,
+        min_component_area=min_component_area,
+        max_items=None,
+    )
+    return {
+        "crop_mask_pure": mask_for_crop_rgb(crop_items, (h, w)),
+        "crop_mask_overlay": overlay_component_masks(result.image_resized, crop_items),
+        "segmentation": overlay_segmentation(result.image_resized, result.mask_seg),
+        "output": overlay_final_output(result.image_resized, result.detections),
+    }
+
+
+def plot_crop_mask(
+    result: "InferenceResult",
+    *,
+    mode: str = "overlay",
+    save_path: str | Path | None = None,
+    show: bool = True,
+    dpi: int = 120,
+    min_component_area: int = 20,
+) -> plt.Figure:
+    """
+    In mask chuẩn bị để cắt (component đã làm sạch).
+    mode: \"overlay\" — mask + bbox trên ảnh; \"pure\" — chỉ mask màu trên nền đen.
+    """
+    panels = panels_from_result(result, min_component_area=min_component_area)
+    img = panels["crop_mask_overlay"] if mode == "overlay" else panels["crop_mask_pure"]
+    title = (
+        "Mask component (chuẩn bị crop / RLE)"
+        if mode == "overlay"
+        else "Mask component (thuần)"
+    )
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    ax.imshow(img)
+    ax.set_title(title, fontsize=11)
+    ax.axis("off")
+    name = Path(result.image_path or "image").name
+    fig.suptitle(name, fontsize=10, y=0.98)
+
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_seg_output_pair(
+    result: "InferenceResult",
+    *,
+    save_path: str | Path | None = None,
+    show: bool = True,
+    dpi: int = 150,
+    figsize: tuple[float, float] = (12, 4.5),
+) -> plt.Figure:
+    """Hai cột giống báo cáo: Segmentation | Output (mask + bbox + classification)."""
+    panels = panels_from_result(result)
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    for ax, (title, key) in zip(
+        axes,
+        [
+            ("2. Segmentation (U-Net predict)", "segmentation"),
+            ("3. Output (mask + bbox + classification)", "output"),
+        ],
+    ):
+        ax.imshow(panels[key])
+        ax.set_title(title, fontsize=10)
+        ax.axis("off")
+
+    name = Path(result.image_path or "image").name
+    fig.suptitle(name, fontsize=11, y=1.02)
+    plt.tight_layout()
+
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_report_grid(
+    results: list["InferenceResult"],
+    *,
+    columns: tuple[str, ...] = ("crop_mask_overlay", "segmentation", "output"),
+    column_titles: dict[str, str] | None = None,
+    save_path: str | Path | None = None,
+    show: bool = True,
+    dpi: int = 150,
+    min_component_area: int = 20,
+    suptitle: str | None = None,
+) -> plt.Figure:
+    """
+    Nhiều ảnh trong một khung (mỗi hàng = một mẫu).
+
+    columns mặc định: mask crop | segmentation | output.
+    Chỉ 2 cột như ảnh mẫu: columns=(\"segmentation\", \"output\").
+    """
+    default_titles = {
+        "crop_mask_overlay": "1. Mask chuẩn bị crop",
+        "crop_mask_pure": "1. Mask component (thuần)",
+        "segmentation": "2. Segmentation (U-Net predict)",
+        "output": "3. Output (mask + bbox + classification)",
+    }
+    titles = {**default_titles, **(column_titles or {})}
+
+    n = len(results)
+    if n == 0:
+        raise ValueError("results rỗng")
+
+    n_cols = len(columns)
+    fig, axes = plt.subplots(
+        n,
+        n_cols,
+        figsize=(4.2 * n_cols, 3.6 * n),
+        squeeze=False,
+    )
+
+    for row, result in enumerate(results):
+        panels = panels_from_result(result, min_component_area=min_component_area)
+        label = Path(result.image_path or f"sample_{row}").stem
+        for col, key in enumerate(columns):
+            ax = axes[row, col]
+            ax.imshow(panels[key])
+            if row == 0:
+                ax.set_title(titles.get(key, key), fontsize=9)
+            if col == 0:
+                ax.set_ylabel(label, fontsize=8, rotation=0, labelpad=48, va="center")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=12, y=1.0)
+    plt.tight_layout()
+
+    if save_path:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
     if show:
         plt.show()
     else:
